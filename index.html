@@ -1,0 +1,159 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebOS</title>
+<style>
+:root{--a:#4f8cff;--bg:#1b2333}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;overflow:hidden;font:14px system-ui,sans-serif;background:#10151f;color:#e8ecf4;user-select:none}
+#desk{position:absolute;inset:0 0 40px 0;background:var(--bg) center/cover}
+.ico{position:absolute;width:84px;text-align:center;padding:6px;border-radius:8px;word-break:break-word}
+.ico:hover{background:#fff3}.ico b{display:block;font-size:34px;font-weight:400}
+.win{position:absolute;background:#232b3d;border:1px solid #fff3;border-radius:10px;display:flex;flex-direction:column;box-shadow:0 8px 30px #0008;min-width:240px;min-height:140px;resize:both;overflow:hidden}
+.win.max{inset:0 0 0 0!important;width:auto!important;height:auto!important}
+.tb{display:flex;gap:6px;padding:6px 8px;background:#2d3750;cursor:move}.tb span{flex:1}
+button,select{background:#3b4766;color:inherit;border:0;border-radius:5px;padding:4px 9px;font:inherit}
+button:hover{background:var(--a)}
+.body{flex:1;overflow:auto;display:flex;flex-direction:column;background:#fff;color:#111;user-select:text}
+.bar{display:flex;gap:4px;padding:4px;background:#e9edf5;flex-wrap:wrap}.bar button,.bar select{background:#cfd7e6;color:#111}
+table{border-collapse:collapse}td{border:1px solid #ccd;padding:0;min-width:70px}td.h{background:#e9edf5;text-align:center;padding:2px 6px}
+td input{width:100%;border:0;padding:3px;font:inherit}
+#bar{position:absolute;left:0;right:0;bottom:0;height:40px;background:#0c111b;display:flex;gap:6px;align-items:center;padding:0 8px}
+#tasks{flex:1;display:flex;gap:4px;overflow:hidden}
+#menu,#cm{position:absolute;background:#232b3d;border:1px solid #fff3;border-radius:8px;padding:4px;display:flex;flex-direction:column;z-index:99999}
+#menu{left:6px;bottom:44px}#menu button,#cm button{text-align:left;background:0}
+.ov{position:fixed;inset:0;background:#0c111bee;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;z-index:999999;text-align:center;padding:20px}
+.ov h1{margin:0}[hidden]{display:none!important}
+.calc{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px}.calc input{grid-column:1/5;font-size:22px;text-align:right;padding:6px}
+.calc button{background:#dde3ef;color:#111;font-size:18px;padding:10px}
+</style></head><body>
+<div id="desk"></div>
+<div id="bar"><button id="st">⊞ Start</button><div id="tasks"></div><span id="clk"></span></div>
+<div id="menu" hidden></div>
+<div id="boot" class="ov"><h1>WebOS</h1><p id="msg">Plug in your drive, then choose it. A folder called WebOS will hold everything.</p><button id="go">Choose drive</button></div>
+<div id="sv" class="ov" hidden><h1>Saving…</h1><p>Saving your files and open windows. Keep the drive plugged in.</p></div>
+<script>
+const VER='0.1.0',$=s=>document.querySelector(s),ICON={cop:'📝',tic:'📊',txt:'📄',html:'📄',csv:'📊',png:'🖼️',jpg:'🖼️'};
+let root,S={ver:VER,wp:0,bg:'#1b2333',accent:'#4f8cff',icons:{},wins:[]},W=[],z=1,tick;
+const ext=n=>n.split('.').pop().toLowerCase(),sp=p=>{const i=p.lastIndexOf('/');return[p.slice(0,i),p.slice(i+1)]};
+const cv=(a,b)=>{a=a.split('.');b=b.split('.');for(let i=0;i<3;i++)if(a[i]-b[i])return a[i]-b[i];return 0};
+async function dir(p,mk){let d=root;for(const s of p.split('/').filter(Boolean))d=await d.getDirectoryHandle(s,{create:!!mk});return d}
+async function ls(p){const d=await dir(p,1),o=[];for await(const[n,h]of d.entries())o.push({n,k:h.kind});return o.sort((a,b)=>(a.k>b.k)-(a.k<b.k)||a.n.localeCompare(b.n))}
+async function rd(p){const[d,n]=sp(p);return(await(await dir(d)).getFileHandle(n)).getFile()}
+async function wr(p,data){const[d,n]=sp(p),f=await(await dir(d,1)).getFileHandle(n,{create:true}),w=await f.createWritable();await w.write(data);await w.close()}
+const rm=async p=>{const[d,n]=sp(p);await(await dir(d)).removeEntry(n,{recursive:true})};
+async function newf(d,n,e,c){for(let i='';;i=(i||1)+1){const p=`${d}/${n}${i?' '+i:''}.${e}`;try{await rd(p)}catch{await wr(p,c);return p}}}
+
+$('#go').onclick=async()=>{
+ if(!window.showDirectoryPicker)return alert('Your browser can\'t write to drives. Use Chrome or Edge on a computer.');
+ let h;try{h=await showDirectoryPicker({mode:'readwrite'})}catch{return}
+ root=await h.getDirectoryHandle('WebOS',{create:true});
+ for(const d of['Desktop','Documents','Pictures','Downloads','System'])await dir(d,1);
+ let fresh=1;
+ try{const o=JSON.parse(await(await rd('System/system.json')).text());fresh=0;S={...S,...o};
+  if(cv(o.ver,VER)<0){if(confirm(`This drive has an older WebOS (v${o.ver}). Update to v${VER}? Your files and settings are kept.`))S.ver=VER;else S.ver=o.ver}
+  else if(cv(o.ver,VER)>0)alert(`This drive was saved by a newer WebOS (v${o.ver}). Reload the site to get the latest version.`)}catch{}
+ if(fresh||S.ver==VER)try{await wr('System/offline.html',await(await fetch(location.href)).text())}catch{}
+ $('#boot').hidden=true;theme();await desk();
+ for(const w of S.wins)launch(w.app,w.path,w);
+ clearInterval(tick);tick=setInterval(save,18e4);await save();
+};
+async function theme(){document.documentElement.style.setProperty('--a',S.accent);const d=$('#desk');d.style.backgroundColor=S.bg;d.style.backgroundImage='none';
+ if(S.wp)try{d.style.backgroundImage=`url(${URL.createObjectURL(await rd('System/wallpaper'))})`}catch{}}
+async function save(){const o=$('#sv');o.hidden=false;
+ for(const r of W)try{await r.save()}catch{}
+ S.wins=W.map(r=>({app:r.app,path:r.x.cur,x:r.w.offsetLeft,y:r.w.offsetTop,w:r.w.offsetWidth,h:r.w.offsetHeight,min:r.w.hidden}));
+ await wr('System/system.json',JSON.stringify(S));await new Promise(r=>setTimeout(r,900));o.hidden=true}
+function drag(h,t,cb){h.onpointerdown=e=>{if(e.button||e.target.tagName=='BUTTON')return;const ox=e.clientX-t.offsetLeft,oy=e.clientY-t.offsetTop;h.setPointerCapture(e.pointerId);
+ h.onpointermove=m=>{t.style.left=m.clientX-ox+'px';t.style.top=Math.max(0,m.clientY-oy)+'px'};
+ h.onpointerup=()=>{h.onpointermove=null;cb&&cb(t.offsetLeft,t.offsetTop)}}}
+function menu(e,items){e.preventDefault();e.stopPropagation();$('#cm')?.remove();const m=document.createElement('div');m.id='cm';m.style.cssText=`left:${e.clientX}px;top:${e.clientY}px`;
+ for(const[n,f]of items){const b=document.createElement('button');b.textContent=n;b.onclick=f;m.append(b)}document.body.append(m)}
+addEventListener('click',()=>{$('#cm')?.remove();$('#menu').hidden=true});
+const open=(p,k)=>{if(k=='directory')return launch('files',p);const e=ext(p);
+ if(['cop','txt','html'].includes(e))launch('notes',p);else if(['tic','csv'].includes(e))launch('sheet',p);else if(['png','jpg'].includes(e))launch('paint',p);else alert('No app can open .'+e+' files yet.')};
+async function ren(p){const[d,n]=sp(p),v=prompt('New name',n);if(!v||v==n)return;
+ try{await wr(d+'/'+v,await rd(p));await rm(p);desk()}catch{alert('Folders can\'t be renamed yet.')}}
+async function del(p){if(confirm('Delete '+p.split('/').pop()+'?')){await rm(p);desk()}}
+async function desk(){const el=$('#desk');el.querySelectorAll('.ico').forEach(e=>e.remove());let i=0;
+ for(const f of await ls('Desktop')){const p='Desktop/'+f.n,e=document.createElement('div'),pos=S.icons[f.n]||{x:12+Math.floor(i/7)*92,y:12+(i%7)*92};i++;
+  e.className='ico';e.style.cssText=`left:${pos.x}px;top:${pos.y}px`;e.innerHTML=`<b>${f.k=='directory'?'📁':ICON[ext(f.n)]||'📄'}</b>`;e.append(f.n);
+  e.ondblclick=()=>open(p,f.k);e.oncontextmenu=ev=>menu(ev,[['Open',()=>open(p,f.k)],['Rename',()=>ren(p)],['Delete',()=>del(p)]]);
+  drag(e,e,(x,y)=>S.icons[f.n]={x,y});el.append(e)}}
+$('#desk').oncontextmenu=e=>menu(e,[['New note',async()=>{await newf('Desktop','New note','cop','{"type":"COP","v":1,"html":""}');desk()}],
+ ['New sheet',async()=>{await newf('Desktop','New sheet','tic','{"type":"TIC","v":1,"cells":{}}');desk()}],
+ ['New folder',async()=>{const n=prompt('Folder name');if(n){await dir('Desktop/'+n,1);desk()}}],['Refresh',desk]]);
+$('#desk').ondragover=e=>e.preventDefault();
+$('#desk').ondrop=async e=>{e.preventDefault();for(const f of e.dataTransfer.files)await wr('Desktop/'+f.name,f);desk()};
+
+function win(title,x,o){const w=document.createElement('div');w.className='win';
+ Object.assign(w.style,{left:(o.x??60+W.length*24)+'px',top:(o.y??40+W.length*24)+'px',width:(o.w||480)+'px',height:(o.h||360)+'px',zIndex:++z});
+ w.innerHTML='<div class=tb><span></span><button>–</button><button>▢</button><button>✕</button></div><div class=body></div>';
+ const[t0,mn,mx,cl]=w.querySelectorAll('.tb span,.tb button');t0.textContent=title;w.querySelector('.body').append(x.el);$('#desk').append(w);
+ const t=document.createElement('button');t.textContent=title;$('#tasks').append(t);
+ const r={w,t,x,app:o.app,save:()=>x.save?.()};W.push(r);
+ w.onpointerdown=()=>w.style.zIndex=++z;drag(w.querySelector('.tb'),w);
+ mn.onclick=()=>w.hidden=true;mx.onclick=()=>w.classList.toggle('max');t.onclick=()=>{w.hidden=!w.hidden;w.style.zIndex=++z};
+ cl.onclick=async()=>{await r.save();w.remove();t.remove();W.splice(W.indexOf(r),1)};if(o.min)w.hidden=true}
+function launch(app,path,o={}){const A={notes:['Notes',notes],sheet:['Sheet',sheet],paint:['Paint',paint],calc:['Calculator',calc],files:['Files',files],settings:['Settings',settings]}[app];
+ if(!A)return;win(A[0]+(path?' – '+path.split('/').pop():''),A[1](path),{...o,app})}
+const mk=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h)e.innerHTML=h;return e};
+const base=p=>p.replace(/\.[^./]+$/,'');
+
+function notes(path){const el=mk('div');el.style.cssText='display:flex;flex-direction:column;flex:1';
+ const bar=mk('div','bar','<button data-c=bold><b>B</b></button><button data-c=italic><i>I</i></button><button data-c=underline><u>U</u></button><select><option>cop<option>txt<option>html</select><button data-s=1>Save as</button>'),
+ ed=mk('div');ed.contentEditable=true;ed.style.cssText='flex:1;padding:10px;outline:0;overflow:auto';el.append(bar,ed);let dirty=0;ed.oninput=()=>dirty=1;
+ const x={el,cur:path,async save(f){if(!f&&!dirty)return;const e=f||(x.cur?ext(x.cur):'cop'),
+  d=e=='cop'?JSON.stringify({type:'COP',v:1,html:ed.innerHTML}):e=='html'?'<!doctype html><meta charset=utf-8>'+ed.innerHTML:ed.innerText;
+  if(x.cur)await wr(base(x.cur)+'.'+e,d),x.cur=base(x.cur)+'.'+e;else x.cur=await newf('Documents','Untitled',e,d);dirty=0;desk()}};
+ bar.onmousedown=e=>e.preventDefault();bar.onclick=e=>{const b=e.target;if(b.dataset.c)document.execCommand(b.dataset.c);if(b.dataset.s)x.save(bar.querySelector('select').value)};
+ if(path)rd(path).then(async f=>{const t=await f.text(),e=ext(path);ed.innerHTML=e=='cop'?(JSON.parse(t).html||''):'';if(e!='cop'){if(e=='html')ed.innerHTML=t;else ed.innerText=t}});return x}
+
+function sheet(path){const el=mk('div'),D={};let dirty=0;el.style.cssText='overflow:auto;flex:1';
+ const ev=(v,n=0)=>{v=String(v??'');if(v[0]!='='||n>9)return v;
+  let s=v.slice(1).replace(/SUM\(([A-F])(\d+):([A-F])(\d+)\)/g,(_,a,b,c,d)=>{let t=0;for(let i=a.charCodeAt(0);i<=c.charCodeAt(0);i++)for(let j=+b;j<=+d;j++)t+=Number(ev(D[String.fromCharCode(i)+j],n+1))||0;return t})
+   .replace(/[A-F]\d+/g,r=>Number(ev(D[r],n+1))||0);try{return Function('return '+s)()}catch{return'#ERR'}};
+ const t=mk('table'),I={};
+ for(let r=0;r<=14;r++){const tr=t.insertRow();for(let c=0;c<=6;c++){const td=tr.insertCell();
+  if(!r||!c){td.className='h';td.textContent=!r&&c?String.fromCharCode(64+c):r||''}else{const k=String.fromCharCode(64+c)+r,i=mk('input');I[k]=i;
+   i.onfocus=()=>i.value=D[k]||'';i.onblur=()=>{D[k]=i.value;dirty=1;show()};td.append(i)}}}
+ const show=()=>{for(const k in I)if(document.activeElement!=I[k])I[k].value=ev(D[k])};
+ const bar=mk('div','bar','<select><option>tic<option>csv</select><button>Save as</button>');el.append(bar,t);
+ const x={el,cur:path,async save(f){if(!f&&!dirty)return;const e=f||(x.cur?ext(x.cur):'tic');let d=JSON.stringify({type:'TIC',v:1,cells:D});
+  if(e=='csv'){d='';for(let r=1;r<=14;r++)d+=[..."ABCDEF"].map(c=>ev(D[c+r])).join(',')+'\n'}
+  if(x.cur)await wr(base(x.cur)+'.'+e,d),x.cur=base(x.cur)+'.'+e;else x.cur=await newf('Documents','Untitled',e,d);dirty=0;desk()}};
+ bar.querySelector('button').onclick=()=>x.save(bar.querySelector('select').value);
+ if(path)rd(path).then(async f=>{const t=await f.text();if(ext(path)=='tic')Object.assign(D,JSON.parse(t).cells);else t.split('\n').forEach((l,r)=>l.split(',').forEach((v,c)=>{if(v)D[String.fromCharCode(65+c)+(r+1)]=v}));show()});return x}
+
+function paint(path){const el=mk('div'),cv=mk('canvas');cv.width=520;cv.height=340;cv.style.cssText='background:#fff;touch-action:none';let dirty=0;
+ const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,520,340);g.lineCap='round';
+ const bar=mk('div','bar','<input type=color value=#222><input type=range min=1 max=30 value=4><select><option>png<option>jpg</select><button>Save as</button>'),[col,sz]=bar.querySelectorAll('input');el.append(bar,cv);
+ cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);g.beginPath();const p=q=>[q.offsetX,q.offsetY];g.moveTo(...p(e));
+  cv.onpointermove=m=>{g.strokeStyle=col.value;g.lineWidth=sz.value;g.lineTo(...p(m));g.stroke();dirty=1};cv.onpointerup=()=>cv.onpointermove=null};
+ const x={el,cur:path,save:f=>new Promise(async ok=>{if(!f&&!dirty)return ok();const e=f||(x.cur?ext(x.cur):'png');
+  cv.toBlob(async b=>{if(x.cur)await wr(base(x.cur)+'.'+e,b),x.cur=base(x.cur)+'.'+e;else x.cur=await newf('Pictures','Drawing',e,b);dirty=0;desk();ok()},'image/'+(e=='jpg'?'jpeg':'png'),.92)})};
+ bar.querySelector('button').onclick=()=>x.save(bar.querySelector('select').value);
+ if(path)rd(path).then(f=>{const i=new Image;i.onload=()=>g.drawImage(i,0,0);i.src=URL.createObjectURL(f)});return x}
+
+function calc(){const el=mk('div','calc'),d=mk('input');d.readOnly=true;el.append(d);
+ for(const k of'C()/789*456-123+0.=⌫'.split('')){const b=mk('button',0,k);b.onclick=()=>{if(k=='C')d.value='';else if(k=='⌫')d.value=d.value.slice(0,-1);
+  else if(k=='='){try{d.value=/^[\d+\-*/.() ]+$/.test(d.value)?Function('return '+d.value)():''}catch{d.value='Error'}}else d.value+=k};el.append(b)}
+ return{el}}
+
+function files(path){let cur=path||'Desktop';const el=mk('div'),bar=mk('div','bar','<button>↑ Up</button><button>New folder</button><b></b>'),L=mk('div');L.style.padding='6px';el.append(bar,L);
+ async function go(p){cur=p;x.cur=p;bar.querySelector('b').textContent=' '+p;L.innerHTML='';
+  for(const f of await ls(p)){const r=mk('div',0,(f.k=='directory'?'📁 ':(ICON[ext(f.n)]||'📄')+' ')+f.n);r.style.cssText='padding:4px;cursor:default';
+   r.ondblclick=()=>f.k=='directory'?go(p+'/'+f.n):open(p+'/'+f.n);r.oncontextmenu=e=>menu(e,[['Rename',async()=>{await ren(p+'/'+f.n);go(p)}],['Delete',async()=>{await del(p+'/'+f.n);go(p)}]]);L.append(r)}}
+ const[up,nf]=bar.querySelectorAll('button');up.onclick=()=>cur.includes('/')&&go(sp(cur)[0]);nf.onclick=async()=>{const n=prompt('Folder name');if(n){await dir(cur+'/'+n,1);go(cur);desk()}};
+ const x={el,cur};go(cur);return x}
+
+function settings(){const el=mk('div'),p=mk('div');p.style.cssText='padding:12px;display:grid;gap:10px';el.append(p);
+ p.innerHTML=`<label>Background color <input type=color id=sb value="${S.bg}"></label><label>Accent color <input type=color id=sa value="${S.accent}"></label>
+ <label>Wallpaper image <input type=file accept="image/*" id=sw></label><button id=sr>Remove wallpaper</button><p>WebOS v${S.ver}. The latest version is v${VER}.</p>`;
+ p.querySelector('#sb').oninput=e=>{S.bg=e.target.value;theme()};p.querySelector('#sa').oninput=e=>{S.accent=e.target.value;theme()};
+ p.querySelector('#sw').onchange=async e=>{await wr('System/wallpaper',e.target.files[0]);S.wp=1;theme()};p.querySelector('#sr').onclick=()=>{S.wp=0;theme()};return{el}}
+
+const APPS=[['📝 Notes','notes'],['📊 Sheet','sheet'],['🎨 Paint','paint'],['🧮 Calculator','calc'],['📁 Files','files'],['⚙️ Settings','settings']];
+for(const[n,a]of APPS){const b=mk('button',0,n);b.onclick=()=>launch(a);$('#menu').append(b)}
+const sv=mk('button',0,'💾 Save now');sv.onclick=save;const off=mk('button',0,'⏻ Shut down');
+off.onclick=async()=>{await save();W.slice().forEach(r=>{r.w.remove();r.t.remove()});W=[];clearInterval(tick);$('#msg').textContent='Everything is saved. You can remove the drive now.';$('#go').textContent='Choose drive';$('#boot').hidden=false};
+$('#menu').append(sv,off);$('#st').onclick=e=>{e.stopPropagation();$('#menu').hidden=!$('#menu').hidden};
+setInterval(()=>$('#clk').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);
+</script></body></html>
